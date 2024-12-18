@@ -7,21 +7,19 @@ import can
 import time
 import random
 import socket
+import threading
 
-IP = '127.0.0.1'
-PORT = 5001
+IP = '141.215.219.197'
+PORT = 8080
 
-VIN = "1FMCU9C74AKB96069"
 clean, longdata = range(2)
 bus = can.Bus()
 can_id = ""
-verbose = 0
+verbose = 1
 session = 1
 security_access = 0
 attempts = 0
 key = None
-
-
 
 services = {	
 		0x10: "DiagnosticSessionControl",
@@ -69,18 +67,45 @@ def get_id_string(id):
 		id_s = prefix + "UNKNOWN_%02x" % id
 	return id_s
 
+def broadcast_wiper_data():
+	global wiper_status
+	while True:
+		with status_lock:
+			stat_msg = [
+				wiper_status, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+			]
+		send_msg(0x058, stat_msg)
+		time.sleep(0.1)
+		
+
+
 def handle_data(payload, pkt_len):
 	global security_access, session, key, attempts
+	global wiper_status
 	if len(payload) < 2: return	
 	id = int(payload[0:2],16)
+	print(id)
 	id_s = get_id_string(id)
-	if can_id == 0x123:
-		#Parking Assist Module reply to 0x73E
+	if can_id == 0x123:		
 		print ("ECM Module")
+		if id == 0x10: #issue with CC.py not being able to pick it up - idk why
+			if (verbose): print ("Diagnostics access")
+			security_access = 0
+			if len(payload) < 6:
+				send_msg(0x321, [0x03, 0x7F, id, 0x13])
+				return
+			pid = int(payload[3:5],16)
+			print(pid)
+			if pid == 0x03:
+				session = 3
+				send_msg(0x321, [0x02, id+0x40, pid])
+			else:
+				session = 1
+				send_msg(0x321, [0x03, id+0x40, pid])
 		if id == 0x3E:
 			if (verbose): print ("Tester Present")
 			security_access = 0					
-			if len(payload) < 2:
+			if len(payload) < 6:
 				send_msg(0x321, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
 				return
 			pid = int(payload[3:5],16)
@@ -90,100 +115,141 @@ def handle_data(payload, pkt_len):
 				send_msg(0x321, [0x10, 0x21, 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x62]) 
 				send_msg(0x321, [0x21, 0x6C, 0x61, 0x73, 0x74, 0x6F, 0x66, 0x66])
 				send_msg(0x321, [0x22, 0x7D])
-				client_sock.sendall(b"START CAR!!!!!!!!!!!!!!")
+				#.encode()
+				client_sock.sendall("0x00".encode('utf-8'))
+
 
 			else:
 				session = 1
-				send_msg(0x321, [0x03, 0x7F, id, 0x11]) #subfunctionNotSupported		
-
-
+				send_msg(0x321, [0x03, 0x7F, id, 0x12]) #subfunctionNotSupported
+		else:
+			send_msg(0x321, [0x03, 0x7F, id, 0x11])		
 
 	elif can_id == 0x456:
-		#Chassis Computer SJB module reply to 0x72E
 		print ("BCM module")
-	elif can_id == 0x789:
-		#PowerTrain Control Module reply to 0x7E8
-		print ("BSCM Module")
-		if id == 0x09:	# Request Vehicle Information
-			print ("Request Vehicle Information")		
+		if id == 0x10:
+			if (verbose): print ("Diagnostics access")
+			security_access = 0
+			print(len(payload))
 			if len(payload) < 6:
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat
+				send_msg(0x654, [0x03, 0x7F, id, 0x13])
 				return
 			pid = int(payload[3:5],16)
-			if pid == 0x00:
-				print ("Replying with ALL Pids supported.")
-				send_msg(0x7E8, [0x06, id+0x40, 0x00, 0x55, 0x00, 0x00, 0x00])
-			elif pid == 0x02:
-				print ("Sending VIN")
-				send_msg(0x7E8, [0x10, id+0x40, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00])
-				print(VIN)
+			print(pid)
+			if pid == 0x03:
+				session = 3
+				send_msg(0x654, [0x02, id+0x40, pid])
+			elif pid == 0x01:
+				session = 1
+				send_msg(0x654, [0x02, id+0x40, pid])
+			else:
+				send_msg(0x654, [0x03, 0x7F, id, 0x12]) #subfunctionNotSupported
 
-		elif id == 0x10:
+		elif id == 0x11:
+			if session == 3:
+				if (verbose): print ("ECUReset")
+				if len(payload) < 2:
+					send_msg(0x654, [0x03, 0x7F, id, 0x13])
+					return
+				pid = int(payload[3:5],16)
+				if pid == 0x01:
+					send_msg(0x654, [0x02, id+0x40, pid])
+				elif pid == 0x03:
+					send_msg(0x654, [0x02, id+0x40, pid])
+					send_msg(0x654, [0x10, 0x13, 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x74])
+					send_msg(0x654, [0x21, 0x72, 0x69, 0x63, 0x6B, 0x79, 0x5F, 0x6C])
+					send_msg(0x654, [0x22, 0x65, 0x76, 0x65, 0x6C, 0x73, 0x7D])
+					send_msg(0x654, [0x10, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+					with status_lock:
+						wiper_status = 0x01
+					print("Wipers activated")
+					client_sock.send("0x0D".encode('utf-8'))
+					time.sleep(20)
+					with status_lock:
+						wiper_status = 0x00
+					print("Wipers off, reset complete")
+					client_sock.send("0x0E".encode('utf-8'))
+					#client_sock.sendall(b"0x0D")
+				else:
+					send_msg(0x654, [0x03, 0x7F, id, 0x12])
+			else:
+				send_msg(0x654, [0x03, 0x7F, id, 0x7F])
+		else:
+			send_msg(0x654, [0x03, 0x7F, id, 0x11]) #serviceNotSupported
+			
+			
+	elif can_id == 0x789:
+		print ("VCU Module")
+
+		if id == 0x10:
 			if (verbose): print ("Diagnostics access")
 			security_access = 0					
 			if len(payload) < 6:
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
 				return
 			pid = int(payload[3:5],16)
 			if pid == 0x01:
 				session = 1			
-				send_msg(0x7E8, [0x02, id+0x40, pid]) 
+				send_msg(0x7FF, [0x02, id+0x40, pid]) 
 			elif pid == 0x02:				
 				session = 2
-				send_msg(0x7E8, [0x02, id+0x40, pid]) 
+				send_msg(0x7FF, [0x02, id+0x40, pid]) 
 			else:
-				session = 1
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x11]) #subfunctionNotSupported		
+				#session = 1
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x12]) #subfunctionNotSupported		
 
 		elif id == 0x23:
 			if (verbose): print ("Read Memory by Address")
 			print ("Read Memory by Address")
 			print (len(payload))
 			if len(payload) < 6:
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
 				return
 			
 			if session != 2:				#if not in session 2 repond with serviceNotSupportedInActiveSession 03 7f 23 7f
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x7f]) #serviceNotSupportedInActiveSession
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x7F]) #serviceNotSupportedInActiveSession
 				return
 			
 			pid = int(payload[3:5],16)			
 			if pid == 0x21: #2-byte address 1-byte length
 				
 				if security_access != 1: #if security access is not 1 respond with securityAccessDenied 03 7f 23 33
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x33]) #securityAccessDenied
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x33]) #securityAccessDenied
 					return
-				if len(payload) < 15:
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat
+				if len(payload) < 5:
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat
 					return
-				print (payload)
+				print (f"Payload: {payload}")
 				address = payload[6:8] + payload[9:11]
 				length = payload[12:14]
 				address = int(address, 16)
 				length = int(length, 16)
-				#The memory region starts at 0x1000 and ends at 0x1EC0, length of firmware is 3776 in decimal
-				if address < 0x1000 or (address+length)>0x1EC0:
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x31]) #requestOutOfRange
-					return			
-				memory_address = address - 0x1000
-				f = open('fw.bin', 'rb')
-				f.seek(memory_address)
-				memory_read = f.read(1) #accepting just 1-byte for purposes of this training only, future versions should support a ISO-TP response for more bytes.
-				memory_read = memory_read[0]
-				send_msg(0x7E8, [0x02, id+0x40, memory_read]) #positive response with 1-byte of memory data	
+				print (f"Address: {address}")
+				print (f"Length: {length}")
+
+				if address == 0x1209 and length == 0x05:
+					#66 6C 61 67 7B 79 61 5F 64 69 64 5F 69 74 5F 64 75 64 65 7D
+					send_msg(0x7FF, [0x10, id+0x40, 0x12, 0x09, 0x14, 0x66, 0x6C, 0x61]) #positive response with 1-byte of memory data
+					send_msg(0x7FF, [0x21, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69]) #positive response with 1-byte of memory data	
+					send_msg(0x7FF, [0x22, 0x64, 0x5F, 0x74, 0x5F, 0x64, 0x75, 0x64]) #positive response with 1-byte of memory data
+					send_msg(0x7FF, [0x23, 0x65, 0x7D]) #positive response with 1-byte of memory data
+					#add logic for TCP socket 
+					client_sock.sendall("0x04".encode('utf-8'))
+				else:
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #invalid format
 			
 			else:
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #requestOutOfRange only accepting 2-byte address and 1-byte length
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #invalid format only accepting 2-byte address and 1-byte length
 
 
 		elif id == 0x27:
 			if (verbose): print ("Security access")
 			if (session < 2):
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x7F]) #serviceNotSupportedInActiveSession		
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x7F]) #serviceNotSupportedInActiveSession		
 				print ("serviceNotSupportedInActiveSession")
 				return				
 			if len(payload) < 6:
-				send_msg(0x7E8, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
+				send_msg(0x7FF, [0x03, 0x7F, id, 0x13]) #incorrectMessageLengthOrInvalidFormat			
 				return
 			pid = int(payload[3:5],16)
 			if pid == 0x01:
@@ -192,54 +258,49 @@ def handle_data(payload, pkt_len):
 				s1 = random.randint(0,255)				
 				s2 = random.randint(0,255)
 				s3 = random.randint(0,255)
-				send_msg(0x7E8, [0x05, id+0x40, 0x01, s1, s2, s3])
+				send_msg(0x7FF, [0x05, id+0x40, pid, s1, s2, s3])
 				key = key_from_seed([s1, s2, s3])
-				print (key)
+				print(f"stored key:  {key}")
 				attempts = 0
 			if pid == 0x02:
 				if (verbose): print ("verifying key")
 
-				if len(payload) < 15:
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x22])
+				if len(payload) < 5:
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x13])
 					return				
 				if attempts > 5:
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x36])
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x36])
 					security_access = 0
 					session = 1
 					return
 				
-				key_received = [int(payload[6:8],16), int(payload[9:11],16), int(payload[12:14],16)]
-				print (key_received)
+				key_received = ['0x' + payload[6:8], '0x' + payload[9:11], '0x' + payload[12:14]] #will need to change this bug for single digit hex vals
+				print ('key received')
+				print((key_received))
 				if (key_received == key):
-					send_msg(0x7E8, [0x02, id+0x40, 0x02])
+					send_msg(0x7FF, [0x02, id+0x40, 0x02])
+					send_msg(0x7FF, [0x10, 0x0C, 0x72, 0x65, 0x4D, 0x45, 0x4D, 0x62])
+					send_msg(0x7FF, [0x21, 0x65, 0x72, 0x3A, 0x12, 0x09])
 					security_access = 1
 					print ("Success")
 				else:
-					send_msg(0x7E8, [0x03, 0x7F, id, 0x35])					
+					send_msg(0x7FF, [0x03, 0x7F, id, 0x35])					
 					attempts += 1
 
-
+		else:
+			send_msg(0x7FF, [0x03, 0x7F, id, 0x11]) #serviceNotSupported	
 	else:
 		pass
 		#unknown module
-
-
-	#print ( id_s )
 	
 
 def setup_can(interface):
 	global bus
 	try:
 		print("Bring up %s...." % (interface))
-		#os.system("sudo /sbin/ip link set can0 up type can bitrate 500000")
 		time.sleep(0.1)
 		bus = can.interface.Bus(interface='socketcan', channel=interface, bitrate=500000)
-        #bus = can.interface.Bus(interface='socketcan', channel='vcan0', bitrate=500000)
-        #bus = can.interface.Bus(interface='socketcan', channel='can0', bitrate=500000)
-        # bus = can.Bus(interface='socketcan', channel='vcan0', bitrate=250000)
-        # bus = can.Bus(interface='pcan', channel='PCAN_USBBUS1', bitrate=250000)
-        # bus = can.Bus(interface='ixxat', channel=0, bitrate=250000)
-        # bus = can.Bus(interface='vector', app_name='CANalyzer', channel=0, bitrate=250000)
+
 	
 	except OSError:
 		print("Cannot find %s interface." % (interface))
@@ -274,29 +335,13 @@ def recv_msg():
 		exit(0)
 
 def key_from_seed(seed):
-    secret = "5B 41 74 65 7D"
-    s1 = int(secret[0:2],16)
-    s2 = int(secret[3:5],16)
-    s3 = int(secret[6:8],16)
-    s4 = int(secret[9:11],16)
-    s5 = int(secret[12:14],16)
-    seed_int = (seed[0]<<16) + (seed[1]<<8) + (seed[2]) 
-    or_ed_seed = ((seed_int & 0xFF0000) >> 16) | (seed_int & 0xFF00) | (s1 << 24) | (seed_int & 0xff) << 16
-    mucked_value = 0xc541a9
-
-    for i in range(0,32):
-        a_bit = ((or_ed_seed >> i) & 1 ^ mucked_value & 1) << 23
-        v9 = v10 = v8 = a_bit | (mucked_value >> 1)
-        mucked_value = v10 & 0xEF6FD7 | ((((v9 & 0x100000) >> 20) ^ ((v8 & 0x800000) >> 23)) << 20) | (((((mucked_value >> 1) & 0x8000) >> 15) ^ ((v8 & 0x800000) >> 23)) << 15) | (((((mucked_value >> 1) & 0x1000) >> 12) ^ ((v8 & 0x800000) >> 23)) << 12) | 32 * ((((mucked_value >> 1) & 0x20) >> 5) ^ ((v8 & 0x800000) >> 23)) | 8 * ((((mucked_value >> 1) & 8) >> 3) ^ ((v8 & 0x800000) >> 23))
-
-    for j in range(0,32):
-        a_bit = ((((s5 << 24) | (s4 << 16) | s2 | (s3 << 8)) >> j) & 1 ^ mucked_value & 1) << 23
-        v14 = v13 = v12 = a_bit | (mucked_value >> 1)
-        mucked_value = v14 & 0xEF6FD7 | ((((v13 & 0x100000) >> 20) ^ ((v12 & 0x800000) >> 23)) << 20) | (((((mucked_value >> 1) & 0x8000) >> 15) ^ ((v12 & 0x800000) >> 23)) << 15) | (((((mucked_value >> 1) & 0x1000) >> 12) ^ ((v12 & 0x800000) >> 23)) << 12) | 32 * ((((mucked_value >> 1) & 0x20) >> 5) ^ ((v12 & 0x800000) >> 23)) | 8 * ((((mucked_value >> 1) & 8) >> 3) ^ ((v12 & 0x800000) >> 23))
-
-    key = ((mucked_value & 0xF0000) >> 16) | 16 * (mucked_value & 0xF) | ((((mucked_value & 0xF00000) >> 20) | ((mucked_value & 0xF000) >> 8)) << 8) | ((mucked_value & 0xFF0) >> 4 << 16)
-#    return "%02X %02X %02X" % ( (key & 0xff0000) >> 16, (key & 0xff00) >> 8, key & 0xff) 
-    return [(key & 0xff0000) >> 16, (key & 0xff00) >> 8, key & 0xff]
+	# seed = [0x00, 0x00, 0x00]
+	print("generated seed: ")
+	print(seed)
+	key = [hex(seed_val ^ 0xFF) for seed_val in seed]
+	print("calculated key: ")
+	print(key)
+	return key
 
 def main():
 	global can_id
@@ -317,6 +362,8 @@ def main():
 	try:
 		while True:
 			msg, data = recv_msg()
+			print(msg)
+			print(data)
 			can_id = msg.arbitration_id
 			data_type = data[0:2]
 			#print (data)
@@ -380,12 +427,16 @@ if __name__ == '__main__':
 	server_socket.bind((IP, PORT))
 	server_socket.listen(1)
 	print(f"Server listening on {IP}:{PORT}")
+	wiper_status = 0x00
+	status_lock = threading.Lock()
 	
 	while True:
 		try:
 			client_sock, addr = server_socket.accept()
 			print(f"Accepted connection from {addr}")
+			threading.Thread(target=broadcast_wiper_data, daemon=True).start()
 			main()
+			#broadcast_wiper_data()
 			break # stop the loop if the function completes sucessfully
 		except Exception as e:
 			print("Function errored out!", e)

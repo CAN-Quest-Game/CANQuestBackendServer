@@ -9,8 +9,8 @@ import random
 import socket
 import threading
 
-IP = '141.215.219.197'
-PORT = 8080
+# IP = '141.215.219.197'
+# PORT = 8080
 
 clean, longdata = range(2)
 bus = can.Bus()
@@ -423,20 +423,20 @@ def main():
 
 
 if __name__ == '__main__':
-	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	server_socket.bind((IP, PORT))
-	server_socket.listen(1)
-	print(f"Server listening on {IP}:{PORT}")
-	wiper_status = 0x00
-	status_lock = threading.Lock()
+	# server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	# server_socket.bind((IP, PORT))
+	# server_socket.listen(1)
+	# print(f"Server listening on {IP}:{PORT}")
+	# wiper_status = 0x00
+	# status_lock = threading.Lock()
 	
 	while True:
 		try:
-			client_sock, addr = server_socket.accept()
-			print(f"Accepted connection from {addr}")
-			threading.Thread(target=broadcast_wiper_data, daemon=True).start()
+			# client_sock, addr = server_socket.accept()
+			# print(f"Accepted connection from {addr}")
+			# threading.Thread(target=broadcast_wiper_data, daemon=True).start()
 			main()
-			#broadcast_wiper_data()
+			# broadcast_wiper_data()
 			break # stop the loop if the function completes sucessfully
 		except Exception as e:
 			print("Function errored out!", e)

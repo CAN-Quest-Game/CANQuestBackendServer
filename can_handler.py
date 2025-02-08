@@ -3,11 +3,13 @@ import can
 import time
 import random
 import socket
+import threading
 import re
 from abc import ABC, abstractmethod
 import uds_services
 from uds_services import *
 
+        
 class CAN_Handler:
     '''Class to handle CANbus initialization, message sending and recieving.'''
     def __init__(self, interface='socketcan', channel='vcan0', bitrate=500000):
@@ -27,11 +29,15 @@ class CAN_Handler:
             print(f"Error setting up CAN interface: {e}")
             sys.exit(1)
 
-    def send_msg(self, can_id, data, is_multiframe=False, is_extended_id=False):
+    def send_msg(self, can_id, data, is_multiframe=False, is_extended_id=False, is_status=False):
         '''Send a message on the CANbus.'''
         try:
             if is_multiframe is True:
                 self.send_multiframe_msg(can_id, data, is_extended_id)
+                return
+            if is_status is True:
+                message = can.Message(arbitration_id=can_id, data=data, is_extended_id=is_extended_id)
+                self.bus.send(message)
                 return
             dlc = len(data)
             final_data = []
@@ -82,17 +88,21 @@ class CAN_Handler:
             else:
                 print("ECU not found")
             return message, payload
-                  #while True:
-            s=''
-            for i in range(message.dlc ):
-                s +=  '{:02x} '.format(message.data[i])
-            #print(' {}'.format(c+s))
-            return message, s
         
         except KeyboardInterrupt:
+            client_sock.sendall("SHUTDOWN".encode('utf-8'))
             print('\n\rRecv Msg Keyboard interrupt')
             self.shutdown()
             exit(0)
+
+    def shutdown(self):
+        '''Close the CANbus interface.'''
+        print("Shutting down CAN interface...")
+        self.bus.shutdown()
+   
+    def listener(self):
+            data = client_sock.recv(1024).decode()
+            print('\n' + f"Received from client: {data}" + '\n')
     
     def _initialize_ecus(self):
         '''Map the arbitration ID to the corresponding ECU.'''
@@ -112,6 +122,15 @@ class CAN_Handler:
     def get_ecu(self,arb_id):
         return self.ecus.get(arb_id)
     
+    def broadcast_wiper_data(self):
+        global wiper_status
+        while True:
+            with status_lock:
+                stat_msg = [wiper_status, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+            self.send_msg(0x058, stat_msg, is_status=True)
+            time.sleep(0.1)
+
+    
 class ECU(ABC):
     def __init__(self, name, req_arb_id, rsp_arb_id):
         self.name = name
@@ -125,22 +144,6 @@ class ECU(ABC):
         
     def initialize_services(self):
             pass
-        #     return {
-        #     0x10: DiagnosticSessionControl(),
-        #     0x11: ECUReset(),
-        #     # 0x27: 'SecurityAccess',  # TODO: Implement SecurityAccess
-        #     # 0x28: 'CommunicationControl',
-        #     0x3E: TesterPresent(),
-        #     # 0x22: 'ReadDataByIdentifier',
-        #     0x23: ReadMemoryByAddress(),
-        #     # 0x2E: 'WriteDataByIdentifier',
-        #     # 0x2F: 'InputOutputControlByIdentifier',
-        #     # 0x31: 'RoutineControl',
-        #     # 0x34: 'RequestDownload',
-        #     # 0x35: 'RequestUpload',
-        #     # 0x36: 'TransferData',
-        #     # 0x37: 'RequestTransferExit'
-        # }
     
     def get_service(self, service_id):
         service = self.supported_services.get(service_id)
@@ -188,6 +191,7 @@ class ECM(ECU):
                 print("success yuh")
                 cansend.send_msg(self.rsp_arb_id, rsp)
                 cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x62, 0x6C, 0x61, 0x73, 0x74, 0x6F, 0x66, 0x66, 0x7D], is_multiframe=True)
+                client_sock.sendall("0x00".encode('utf-8'))
             else:
                 cansend.send_msg(self.rsp_arb_id, rsp)
         else:
@@ -202,8 +206,9 @@ class BCM(ECU):
             0x10: DiagnosticSessionControl(),
             0x11: ECUReset(),
             }
-
+    
     def handle_request(self, payload, cansend):
+        global wiper_status
         print("BCM")
         print(len(payload))
         payload_bytes = re.split(r'\s+', payload)
@@ -229,6 +234,15 @@ class BCM(ECU):
                 print("success yuh")
                 cansend.send_msg(self.rsp_arb_id, rsp)
                 cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x74, 0x72, 0x69, 0x63, 0x6B, 0x79, 0x5F, 0x6C, 0x65, 0x76, 0x65, 0x6C, 0x73, 0x7D], is_multiframe=True)
+                with status_lock:
+                    wiper_status = 0x01
+                print("Wipers activated")
+                client_sock.send("0x0D".encode('utf-8'))
+                time.sleep(20)
+                with status_lock:
+                    wiper_status = 0x00
+                print("Wipers off, reset complete")
+                client_sock.send("0x0E".encode('utf-8'))
             else:
                 cansend.send_msg(self.rsp_arb_id, rsp)
         else:
@@ -264,15 +278,6 @@ class VCU(ECU):
             print("hex key: ", hex_key)
             self.stored_key = key
             return rsp
-        
-        # def key_from_seed(self, rsp):
-        #     key = [(seed_val ^ 0xFF) for seed_val in self.seed]
-        #     print("calculated key: ", key)
-        #     self.stored_key = key
-        #     rsp.append(key)
-        #     return rsp
-        # TODO: add implementation that once unlocked and tried to request seed again, add request sequence error!
-        
 
         def handle_request(self, payload, cansend):
             print(len(payload))    #apparently mem addr is not returnedd))
@@ -308,6 +313,7 @@ class VCU(ECU):
                         if rsp == [0x63]:
                             print("success yuh")
                             cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
+                            client_sock.sendall("0x04".encode('utf-8'))
                         else:
                             cansend.send_msg(self.rsp_arb_id, rsp)
                     else:
@@ -315,36 +321,37 @@ class VCU(ECU):
 
                 else:
                     cansend.send_msg(self.rsp_arb_id, rsp)
-                #change logic here soon please! (use self.unlocked)
-                #if self.unlocked:
-            # elif isinstance(service, ReadMemoryByAddress):
-            #     if self.unlocked == True:
-            #         if rsp == [0x63]:
-            #             print("success yuh")
-            #             cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
-            #     # elif rsp == [0x63]:
-            #     #     print("success yuh")
-            #     #     cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
-            #     else:
-            #         cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x33])
             else:
                 cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x7F])
-
-
 
 
 def main():
     can_handler = CAN_Handler()
     can_handler.setup()
     while True:
-        x, returned= can_handler.recv_msg()
+        threading.Thread(target=can_handler.broadcast_wiper_data, daemon=True).start()
+        can_handler.recv_msg()
 
-        print("PRINTING")
-        print(x)
-        print(returned)
-        #payload = data[3:3+pkt_len*3]
 
-        
+       # can_handler.listener()
         
 if __name__ == '__main__':
-    main()
+    IP = '127.0.0.1'
+    PORT = 8081
+    wiper_status = 0x00
+    status_lock = threading.Lock()
+
+
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((IP, PORT))
+    server_socket.listen(1)
+    print(f"Server listening on {IP}:{PORT}")
+    while True:
+        try:
+            client_sock, addr = server_socket.accept()
+            print(f"Accepted connection from {addr}")
+            main()
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            print("retrying...")

@@ -73,7 +73,8 @@ class CAN_Handler:
             parsed = '{0:f} {1:x} {2:x} '.format(message.timestamp, message.arbitration_id, message.dlc)
             payload = ''
             for i in range(message.dlc):
-                payload += '{0:x} '.format(message.data[i])
+          #      payload += '{0:x} '.format(message.data[i])
+                payload += '{:02x} '.format(message.data[i])
 
             ecu = self.get_ecu(message.arbitration_id)
             if ecu:
@@ -81,6 +82,13 @@ class CAN_Handler:
             else:
                 print("ECU not found")
             return message, payload
+                  #while True:
+            s=''
+            for i in range(message.dlc ):
+                s +=  '{:02x} '.format(message.data[i])
+            #print(' {}'.format(c+s))
+            return message, s
+        
         except KeyboardInterrupt:
             print('\n\rRecv Msg Keyboard interrupt')
             self.shutdown()
@@ -112,74 +120,47 @@ class ECU(ABC):
         self.supported_services = self.initialize_services()
         self.active_session = None #initialize to default session
 
-    # @staticmethod
-    # def register_service(service: UDSService):
-    #     ECU.uds_services[service.service_id()] = service
     #TODO:add self.security_level checks
     #add self.session checks
         
     def initialize_services(self):
-            return {
-            0x10: DiagnosticSessionControl(),
-            0x11: ECUReset(),
-            0x27: 'SecurityAccess',  # TODO: Implement SecurityAccess
-            0x28: 'CommunicationControl',
-            0x3E: TesterPresent(),
-            0x22: 'ReadDataByIdentifier',
-            0x23: ReadMemoryByAddress(),
-            0x2E: 'WriteDataByIdentifier',
-            0x2F: 'InputOutputControlByIdentifier',
-            0x31: 'RoutineControl',
-            0x34: 'RequestDownload',
-            0x35: 'RequestUpload',
-            0x36: 'TransferData',
-            0x37: 'RequestTransferExit'
-        }
+            pass
+        #     return {
+        #     0x10: DiagnosticSessionControl(),
+        #     0x11: ECUReset(),
+        #     # 0x27: 'SecurityAccess',  # TODO: Implement SecurityAccess
+        #     # 0x28: 'CommunicationControl',
+        #     0x3E: TesterPresent(),
+        #     # 0x22: 'ReadDataByIdentifier',
+        #     0x23: ReadMemoryByAddress(),
+        #     # 0x2E: 'WriteDataByIdentifier',
+        #     # 0x2F: 'InputOutputControlByIdentifier',
+        #     # 0x31: 'RoutineControl',
+        #     # 0x34: 'RequestDownload',
+        #     # 0x35: 'RequestUpload',
+        #     # 0x36: 'TransferData',
+        #     # 0x37: 'RequestTransferExit'
+        # }
     
     def get_service(self, service_id):
         service = self.supported_services.get(service_id)
         if not service:
             print(f"Service ID {hex(service_id)} not found.")
         return service
-
-        
-    # def map_service(self, service_id):
-    #     #print(hex(service_id))
-    #     all_services = {
-    #                 0x10: DiagnosticSessionControl(),
-    #                 0x11: ECUReset(),
-    #                 0x27: 'SecurityAccess', #TODO: Implement SecurityAccess
-    #                 0x28: 'CommunicationControl',
-    #                 0x3E: TesterPresent(),
-    #                 0x22: 'ReadDataByIdentifier',
-    #                 0x23: ReadMemoryByAddress(),
-    #                 0x2E: 'WriteDataByIdentifier',
-    #                 0x2F: 'InputOutputControlByIdentifier',
-    #                 0x31: 'RoutineControl',
-    #                 0x34: 'RequestDownload',
-    #                 0x35: 'RequestUpload',
-    #                 0x36: 'TransferData',
-    #                 0x37: 'RequestTransferExit'}
-    #     service = all_services.get(service_id)
-    #     if service:
-    #         self.supported_services[service_id] = service
-    #         print("successful addition")
-    #     else:
-    #         print(f"Service ID {hex(service_id)} not found.")
-    # # @staticmethod
-    # def get_service(self, service_id):
-    #     return self.supported_services[service_id]
     
     @abstractmethod
     def handle_request(self, payload):
         pass
 
-    # def check_session(self, session):
-    #     if session
-
 class ECM(ECU):
     def __init__(self, name, req_arb_id, rsp_arb_id):
         super().__init__(name, req_arb_id, rsp_arb_id)
+
+    def initialize_services(self):
+        return {
+            0x10: DiagnosticSessionControl(),
+            0x3E: TesterPresent()
+        }
 
     def handle_request(self, payload, cansend):
         print(len(payload))
@@ -188,6 +169,15 @@ class ECM(ECU):
         service_id = int(payload_bytes[1], 16)
         print(service_id)
         service=self.get_service(service_id)
+        
+        if service is None:
+            cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x11])
+            return
+        elif service.validate_length(dlc, payload_bytes) is False:
+            cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x13])
+            return
+
+        
         if isinstance(service, DiagnosticSessionControl):
             self.active_session = service.get_diagnostic_session(payload_bytes)
             print("Active session is:", self.active_session)
@@ -206,6 +196,13 @@ class ECM(ECU):
 class BCM(ECU):
     def __init__(self, name, req_arb_id, rsp_arb_id):
         super().__init__(name, req_arb_id, rsp_arb_id)
+
+    def initialize_services(self):
+        return {
+            0x10: DiagnosticSessionControl(),
+            0x11: ECUReset(),
+            }
+
     def handle_request(self, payload, cansend):
         print("BCM")
         print(len(payload))
@@ -214,6 +211,14 @@ class BCM(ECU):
         service_id = int(payload_bytes[1], 16)
         print(service_id)
         service=self.get_service(service_id)
+        
+        if service is None:
+            cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x11])
+            return
+        elif service.validate_length(dlc, payload_bytes) is False:
+            cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x13])
+            return
+        
         if isinstance(service, DiagnosticSessionControl):
             self.active_session = service.get_diagnostic_session(payload_bytes)
             print("Active session is:", self.active_session)
@@ -231,8 +236,44 @@ class BCM(ECU):
 
 
 class VCU(ECU):
+        
         def __init__(self, name, req_arb_id, rsp_arb_id):
             super().__init__(name, req_arb_id, rsp_arb_id)
+            self.unlocked = False
+            self.seed = []
+            self.stored_key = []
+            
+        def initialize_services(self):
+            return {
+                0x10: DiagnosticSessionControl(),
+                0x23: ReadMemoryByAddress(),
+                0x27: SecurityAccess()
+                }
+        
+        def security_algorithm(self, rsp):
+            seed = []
+            for i in range(0,3):
+                seed_val = random.randint(0,255)
+                seed.append(seed_val)
+                rsp.append(seed_val)
+            print("generated seed", seed)
+            self.seed = seed
+            key = [(seed_val ^ 0xFF) for seed_val in seed]
+            print("stored key: ", key)
+            hex_key = [hex(key_byte) for key_byte in key]
+            print("hex key: ", hex_key)
+            self.stored_key = key
+            return rsp
+        
+        # def key_from_seed(self, rsp):
+        #     key = [(seed_val ^ 0xFF) for seed_val in self.seed]
+        #     print("calculated key: ", key)
+        #     self.stored_key = key
+        #     rsp.append(key)
+        #     return rsp
+        # TODO: add implementation that once unlocked and tried to request seed again, add request sequence error!
+        
+
         def handle_request(self, payload, cansend):
             print(len(payload))    #apparently mem addr is not returnedd))
             payload_bytes = re.split(r'\s+', payload)
@@ -240,20 +281,54 @@ class VCU(ECU):
             service_id = int(payload_bytes[1], 16)
             print(service_id)
             service=self.get_service(service_id)
+            if service is None:
+                cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x11])
+                return
+            elif service.validate_length(dlc, payload_bytes) is False:
+                cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x13])
+                return
             if isinstance(service, DiagnosticSessionControl):
                 self.active_session = service.get_diagnostic_session(payload_bytes, trigger=True)
                 print("Active session is:", self.active_session)
-            rsp = service.construct_msg(payload_bytes, special_case=True)
+            rsp = service.construct_msg(payload_bytes, special_case=True, key=self.stored_key)
             print(rsp)
-            if self.active_session == 0x02:
+            if self.active_session == 0x02 or isinstance(service, DiagnosticSessionControl):
                 print("worked")
-                if rsp == [0x63]:
-                    print("success yuh")
-                    cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
+                if rsp == [0x67, 0x01]:
+                    print("security success yuh")
+                    new_rsp = self.security_algorithm(rsp)
+                    cansend.send_msg(self.rsp_arb_id, new_rsp)
+                elif rsp == [0x67, 0x02]:
+                    print("validated seed, successful unlock")
+                    cansend.send_msg(self.rsp_arb_id, rsp)
+                    cansend.send_msg(self.rsp_arb_id, [0x72, 0x65, 0x4D, 0x45, 0x4D, 0x62, 0x65, 0x72, 0x3A, 0x12, 0x09], is_multiframe=True)
+                    self.unlocked = True
+                elif isinstance(service, ReadMemoryByAddress):
+                    if self.unlocked == True:
+                        if rsp == [0x63]:
+                            print("success yuh")
+                            cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
+                        else:
+                            cansend.send_msg(self.rsp_arb_id, rsp)
+                    else:
+                        cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x33])
+
                 else:
                     cansend.send_msg(self.rsp_arb_id, rsp)
+                #change logic here soon please! (use self.unlocked)
+                #if self.unlocked:
+            # elif isinstance(service, ReadMemoryByAddress):
+            #     if self.unlocked == True:
+            #         if rsp == [0x63]:
+            #             print("success yuh")
+            #             cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
+            #     # elif rsp == [0x63]:
+            #     #     print("success yuh")
+            #     #     cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
+            #     else:
+            #         cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x33])
             else:
-                cansend.send_msg(self.rsp_arb_id, rsp)
+                cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x7F])
 
 
 
@@ -262,55 +337,14 @@ def main():
     can_handler = CAN_Handler()
     can_handler.setup()
     while True:
-        can_handler.recv_msg()
-    #     msg, data = can_handler.recv_msg()
-    #     print('msg arb: ')
-    #     print(hex(msg.arbitration_id))
-    #     print('Data: ')
-    #     print(data)
-    #     name = can_handler.map_ecu(msg.arbitration_id)[0]
-    #     rsp_id = can_handler.map_ecu(msg.arbitration_id)[1]
-    #     print(name)
-    #     #new_ecu = ECU(name, msg.arbitration_id, rsp_id)
-    # #URGENT: NEED TO IMPLEMENT A WAY TO MAP ARB ID TO NEW ECU OBJECT
-    #     # ecm = ECM(name, msg.arbitration_id, rsp_id)
-    #     # # print(ecm.rsp_arb_id)
-    #     # ecm.handle_request(data, can_handler)
-    #     bcm = BCM(name, msg.arbitration_id, rsp_id)
-    #     bcm.handle_request(data, can_handler)
-        # vcu = VCU(name, msg.arbitration_id, rsp_id)
-        # vcu.handle_request(data, can_handler)
-   # can_handler.send_msg(new_ecu.rsp_arb_id, msg_to_send)
-    #handle_message(msg, data)
+        x, returned= can_handler.recv_msg()
+
+        print("PRINTING")
+        print(x)
+        print(returned)
+        #payload = data[3:3+pkt_len*3]
+
         
         
 if __name__ == '__main__':
     main()
-
-#trash
-#main
-        #can_handler = CANHandler('socketcan', 'vcan0', 500000)
-        #can_handler.setup()
-        #can_handler.recv_msg()
-        #123#021001
-        #message = timestamp + arbid + payload
-        #payload = 021001
-        #arbid = 123
-        #map_ecu(arbid)
-            #ecus = {123:ECM, 124:TCM}
-            #return the ecus[arbid]
-        #new_ecu = ECU(ECM, 123, 321,)
-        #ECU.can_handler.
-
-
-
-# class ECU(ABC):
-#     '''Abstract class that represents an electronic control unit on the network.'''
-#     def __init__(self, can_handler, rsp_arb_id, req_arb_id):
-#         self.can_handler = can_handler
-#         self.rsp_arb_id = rsp_arb_id
-#         self.req_arb_id = req_arb_id
-#         self.uds_services = {}
-
-#     def add_uds_service(self, service_id, service_name):
-#         self.uds_services[service_id] = service_name

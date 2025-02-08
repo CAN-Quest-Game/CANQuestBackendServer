@@ -17,8 +17,8 @@ class UDS_Service(ABC):
         pass
 
     @abstractmethod
-    def validate_length(self):
-        pass    
+    def validate_length(self, dlc, payload):
+        pass
 
     @abstractmethod
     def subfunction(self):
@@ -32,10 +32,6 @@ class UDS_Service(ABC):
     def negative_response(self):
         pass
 
-    # @abstractmethod
-    # def is_allowed_in_session(self, session):
-    #     return session in self.diagnostic_sessions
-
 
 class DiagnosticSessionControl(UDS_Service):
     '''tbd'''
@@ -44,8 +40,9 @@ class DiagnosticSessionControl(UDS_Service):
         self.nrc = None
         self.subfunction_id = None
         
-    def validate_length(self, payload):
-        if len(payload) < 3:
+    def validate_length(self, dlc, payload):
+        print("VALIDATE LENGTH", len(payload))
+        if (int(dlc) != (len(payload) - 2)) or (len(payload) != 4): #TODO: change all length checks to != length lol
             return False
         else:
             return True
@@ -68,10 +65,11 @@ class DiagnosticSessionControl(UDS_Service):
         else:
             return None
 
-    def construct_msg(self, payload, special_case=False):
+    def construct_msg(self, payload, special_case=False, key=None):
         print("DiagnosticSessionControl")
         print(payload)
-        length_check = self.validate_length(payload)
+        dlc = payload[0]
+        length_check = self.validate_length(dlc, payload)
         subfunc_check = self.subfunction(payload, trigger_programming_session=special_case)
         if length_check and subfunc_check:
             response = self.positive_response()
@@ -98,10 +96,10 @@ class TesterPresent(UDS_Service):
         self.service_id = 0x3E
         self.nrc = None
         self.subfunction_id = None
-       # self.diagnostic_sessions = [0x01] TODO: idk if necessary yet
 
-    def validate_length(self, payload):
-        if len(payload) < 3:
+    def validate_length(self, dlc, payload):
+        print("VALIDATE LENGTH", len(payload))
+        if (int(dlc) != (len(payload) - 2)) or (len(payload) < 4):
             return False
         else:
             return True
@@ -118,7 +116,8 @@ class TesterPresent(UDS_Service):
     def construct_msg(self, payload):
         print("TesterPresent")
         print(payload)
-        length_check = self.validate_length(payload)
+        dlc = payload[0]
+        length_check = self.validate_length(dlc, payload)
         subfunc_check = self.subfunction(payload)
         if length_check and subfunc_check:
             response = self.positive_response()
@@ -145,16 +144,17 @@ class ECUReset(UDS_Service):
         self.service_id = 0x11
         self.nrc = None
         self.subfunction_id = None
-        self.diagnostic_sessions = [0x03]
 
-    def validate_length(self, payload):
-        if len(payload) < 3:
+    def validate_length(self, dlc, payload):
+        print("VALIDATE LENGTH", len(payload))
+        if (int(dlc) != (len(payload) - 2)) or (len(payload) < 4):
             return False
         else:
             return True
 
     def subfunction(self, payload):
         valid_subfunctions = [0x01, 0x03]
+        #id = int(payload[0:2],16)
         subfunction = int(payload[2], 16)
         if subfunction in valid_subfunctions:
             self.subfunction_id = subfunction
@@ -165,7 +165,8 @@ class ECUReset(UDS_Service):
     def construct_msg(self, payload):
         print("ECUReset")
         print(payload)
-        length_check = self.validate_length(payload)
+        dlc = payload[0]
+        length_check = self.validate_length(dlc, payload)
         subfunc_check = self.subfunction(payload)
         if length_check and subfunc_check:
             response = self.positive_response()
@@ -191,10 +192,9 @@ class ReadMemoryByAddress(UDS_Service):
         self.service_id = 0x23
         self.nrc = None
 
-    def validate_length(self, payload):
-        if len(payload) < 4:
-            self.nrc = 0x13
-            self.negative_response()
+    def validate_length(self, dlc, payload):
+        print("VALIDATE LENGTH", len(payload))
+        if (int(dlc) != (len(payload) - 2)) or (len(payload) < 5):
             return False
         else:
             return True
@@ -204,10 +204,11 @@ class ReadMemoryByAddress(UDS_Service):
         #add second nibble check for 05 - i forgot what that means lol
         #shouldn't it be 14 lol i am so confused
         #TODO add logic for mem size check
+        mem_size = []
         addressAndLengthFormatIdentifier = hex(int(payload[2], 16))
         print("Address and Length Format Identifier: ", addressAndLengthFormatIdentifier)
         mem_address = payload[3:5]
-        mem_size = payload[5]
+        mem_size = payload[5:6]
         print("Memory Address: ", mem_address)
         print("Memory Size: ", mem_size)
         nibble1 = addressAndLengthFormatIdentifier[2]
@@ -229,12 +230,13 @@ class ReadMemoryByAddress(UDS_Service):
         else:
             return False
 
-    def construct_msg(self, payload, special_case=True):
+    def construct_msg(self, payload, special_case=True, key=None):
         print("ReadMemoryByAddress")
         print(payload)
+        dlc = payload[0]
         addr_len_check = self.addressAndLengthFormatValidation(payload)
         subfunc_check = self.subfunction(payload)
-        length_check = self.validate_length(payload)
+        length_check = self.validate_length(dlc, payload)
         if length_check and addr_len_check and subfunc_check:
             response = self.positive_response()
             return response
@@ -253,3 +255,75 @@ class ReadMemoryByAddress(UDS_Service):
 
     def negative_response(self):
         return [0x7F, self.service_id, self.nrc]
+    
+class SecurityAccess(UDS_Service):
+    def __init__(self):
+        self.service_id = 0x27
+        self.nrc = None
+        self.subfunction_id = None
+
+    def subfunction(self, payload):
+        valid_subfunctions = [0x01, 0x02]
+        subfunction = int(payload[2], 16)
+        if subfunction in valid_subfunctions:
+            # if subfunction == 0x02:
+            #     if self.check_key(payload, stored_key) is False:
+            #         self.nrc = 0x35
+            #         return False
+            self.subfunction_id = subfunction
+            return True
+        else:
+            return False
+        
+    def check_key(self, payload, stored_key):
+        key = []
+        for i in range(3,6):
+            key.append(int(payload[i], 16))
+        #key = int(payload[3:6], 16)
+        print("CHECK KEY:", key, stored_key)
+        if key == stored_key:
+            return True
+        else:
+            return False
+    
+    def validate_length(self, dlc, payload):
+        print("VALIDATE LENGTH", len(payload))
+        if (int(dlc) != (len(payload) - 2)) or (len(payload) < 4):
+            return False
+        else:
+            return True
+        
+    def construct_msg(self, payload, special_case=True, key=None):
+        print("SecurityAccess")
+        print(payload)
+        dlc = payload[0]
+        length_check = self.validate_length(dlc, payload)
+        subfunc_check = self.subfunction(payload)
+        if self.subfunction_id == 0x02:
+            key_check = self.check_key(payload, stored_key=key)
+            if key_check == False:
+                self.nrc = 0x35
+                return self.negative_response()
+        if length_check and subfunc_check:
+            response = self.positive_response()
+            return response
+        elif length_check == False:
+            self.nrc = 0x13
+            return self.negative_response()
+        # elif key_check == False:
+        #     self.nrc = 0x35
+        #     return self.negative_response()
+        elif subfunc_check == False:
+            self.nrc = 0x12
+            return self.negative_response()
+        else:
+            self.nrc = 0x22
+            return self.negative_response()
+        
+    def positive_response(self):
+        return [self.service_id+0x40, self.subfunction_id]
+    
+    def negative_response(self):
+        return [0x7F, self.service_id, self.nrc]
+
+    

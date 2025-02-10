@@ -1,9 +1,11 @@
 from socket import *
 IP = '127.0.0.1'
-PORT = 8081
+#IP = '141.215.216.168'
+PORT = 8080
 
 socketClient = socket(AF_INET, SOCK_STREAM)
-socketClient.connect((IP,PORT)) 
+socketClient.connect((IP,PORT))
+ 
 
 while True:
     data = socketClient.recv(1024).decode()

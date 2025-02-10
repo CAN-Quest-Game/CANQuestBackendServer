@@ -14,7 +14,7 @@ def main():
         
 if __name__ == '__main__':
     IP = '127.0.0.1'
-    PORT = 8081
+    PORT = 8080
     wiper_status = 0x00
     status_lock = threading.Lock()
 

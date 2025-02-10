@@ -87,7 +87,7 @@ class CAN_Handler:
             if ecu:
                 ecu.handle_request(payload, self)
             else:
-                print("ECU not found")
+                if (verbose): print("ECU not found")
             return message, payload
         
         except KeyboardInterrupt:
@@ -149,7 +149,7 @@ class ECU(ABC):
     def get_service(self, service_id):
         service = self.supported_services.get(service_id)
         if not service:
-            print(f"Service ID {hex(service_id)} not found.")
+            if (verbose): print(f"Service ID {hex(service_id)} not found.")
         return service
     
     @abstractmethod

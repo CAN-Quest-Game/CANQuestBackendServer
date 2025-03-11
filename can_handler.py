@@ -6,10 +6,17 @@ import socket
 import threading
 import re
 from abc import ABC, abstractmethod
-import uds_services
 from uds_services import *
 import ipaddress
-
+import argparse
+    
+wiper_status = 0x00
+status_lock = threading.Lock()
+verbose = False
+client_sock = None
+server_socket = None
+stop_can = threading.Event()
+server_down = False
         
 class CAN_Handler:
     '''Class to handle CANbus initialization, message sending and recieving.'''
@@ -90,20 +97,16 @@ class CAN_Handler:
                 if (verbose): print("ECU not found")
             return message, payload
         
-        except KeyboardInterrupt:
-            client_sock.sendall("SHUTDOWN".encode('utf-8'))
-            print('\n\rRecv Msg Keyboard interrupt. Bye!')
-            self.shutdown()
-            exit(0)
+        except can.CanError:
+            print("MESSAGE NOT RECEIVED")
 
     def shutdown(self):
         '''Close the CANbus interface.'''
         print("Shutting down CAN interface...")
-        self.bus.shutdown()
-   
-    def listener(self):
-            data = client_sock.recv(1024).decode()
-            print('\n' + f"Received from client: {data}" + '\n')
+        if self.bus:
+            if client_sock:
+                client_sock.sendall("SHUTDOWN".encode('utf-8')) 
+            self.bus.shutdown()
     
     def _initialize_ecus(self):
         '''Map the arbitration ID to the corresponding ECU.'''
@@ -125,7 +128,7 @@ class CAN_Handler:
     
     def broadcast_wiper_data(self):
         global wiper_status
-        while True:
+        while not stop_can.is_set():
             with status_lock:
                 stat_msg = [wiper_status, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
             self.send_msg(0x058, stat_msg, is_status=True)
@@ -192,7 +195,8 @@ class ECM(ECU):
                 if(verbose): print("success yuh")
                 cansend.send_msg(self.rsp_arb_id, rsp)
                 cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x62, 0x6C, 0x61, 0x73, 0x74, 0x6F, 0x66, 0x66, 0x7D], is_multiframe=True)
-                client_sock.sendall("0x00".encode('utf-8'))
+                if client_sock:
+                    client_sock.sendall("0x00".encode('utf-8'))
             else:
                 cansend.send_msg(self.rsp_arb_id, rsp)
         else:
@@ -239,14 +243,16 @@ class BCM(ECU):
                 with status_lock:
                     wiper_status = 0x01
                 if (verbose): print("Wipers activated")
-                client_sock.send("0x0D".encode('utf-8'))
+                if client_sock:
+                    client_sock.send("0x0D".encode('utf-8'))
                 time.sleep(15)
                 with status_lock:
                     wiper_status = 0x00
                 if (verbose): print("Wipers off, reset complete")
                 cansend.send_msg(self.rsp_arb_id, rsp)
                 cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x74, 0x72, 0x69, 0x63, 0x6B, 0x79, 0x5F, 0x6C, 0x65, 0x76, 0x65, 0x6C, 0x73, 0x7D], is_multiframe=True)
-                client_sock.send("0x0E".encode('utf-8'))
+                if client_sock:
+                    client_sock.send("0x0E".encode('utf-8'))
             else:
                 cansend.send_msg(self.rsp_arb_id, rsp)
         else:
@@ -317,7 +323,8 @@ class VCU(ECU):
                         if rsp == [0x63]:
                             if (verbose): print("success yuh")
                             cansend.send_msg(self.rsp_arb_id, [rsp[0], 0x66, 0x6C, 0x61, 0x67, 0x7B, 0x79, 0x61, 0x5F, 0x64, 0x69, 0x64, 0x5F, 0x69, 0x74, 0x5F, 0x64, 0x75, 0x64, 0x65, 0x7D], is_multiframe=True)
-                            client_sock.sendall("0x04".encode('utf-8'))
+                            if client_sock:
+                                client_sock.sendall("0x04".encode('utf-8'))
                         else:
                             cansend.send_msg(self.rsp_arb_id, rsp)
                     else:
@@ -328,23 +335,69 @@ class VCU(ECU):
             else:
                 cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x7F])
 
-
-def main(verbose):
-    can_handler = CAN_Handler(verbose=verbose)
-    can_handler.setup()
-    while True:
-        threading.Thread(target=can_handler.broadcast_wiper_data, daemon=True).start()
+def can_message_handler(can_handler, stop_can):
+    while not stop_can.is_set():
         can_handler.recv_msg()
 
+def client_handler(client_sock, can_handler, stop_can):
+    global server_down
+    try:
+        while not stop_can.is_set():
+            data = client_sock.recv(1024).decode()
+            if not data:
+                print ("\nClient Disconnected. Please re-connect.")
+                server_socket.shutdown(0)
+                server_down = True
+                break
 
-       # can_handler.listener()
+            if verbose: print('\n' + f"Received from client: {data}" + '\n')
+
+    except Exception as e:
+        print(f"Client Error: {e}")
+        stop_can.set()
+
+
+
+def main(verbose):
+
+    global client_sock, server_socket
+    can_handler = CAN_Handler(verbose=verbose)
+    can_handler.setup()
+
+    try:
+
+        can_thread = threading.Thread(target=can_message_handler, args=(can_handler, stop_can), daemon=True)
+        can_thread.start()
+
+        wiper_thread = threading.Thread(target=can_handler.broadcast_wiper_data, daemon=True)
+        wiper_thread.start()
+        print("Waiting for client connection...")
+        while not stop_can.is_set():
+           client_sock, addr = server_socket.accept()
+           print(f"Accepted connection from {addr}")    
+
+           client_thread = threading.Thread(target=client_handler, args=(client_sock, can_handler, stop_can), daemon=True)
+           client_thread.start()
+
+    except KeyboardInterrupt:
+        print("\nServer shutdown")
+    except Exception as e:
+        if server_down == False:
+            print(f"Server Error: {e}")
+        else:
+            print("Initiating server shutdown due to client shutdown.")
+    finally:
+        stop_can.set()
+        if can_handler:
+            can_handler.shutdown()
+        if client_sock:
+            client_sock.close()
+        if server_socket:
+            server_socket.close()
+        print("Server shutdown complete. Bye!")
         
 if __name__ == '__main__':
-    wiper_status = 0x00
-    status_lock = threading.Lock()
-    verbose = False
 
-    import argparse
     try: 
         parser = argparse.ArgumentParser(description='CANQuest Backend Server')
         parser.add_argument('-v', '--verbose', action='store_true')
@@ -354,8 +407,6 @@ if __name__ == '__main__':
         if args.verbose:
             print("Verbose mode enabled")
             verbose = True
-
-
 
         print( "\n"
         " ██████╗ █████╗ ███╗   ██╗ ██████╗ ██╗   ██╗███████╗███████╗████████╗ \n"
@@ -389,14 +440,8 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error: {e}, please restart the server.")
             exit()
-        while True:
-            try:
-                client_sock, addr = server_socket.accept()
-                print(f"Accepted connection from {addr}")
-                main(verbose)
-                break
-            except Exception as e:
-                print(f"Error: {e}")
-                print("retrying...")
+
+        main(verbose)
+
     except KeyboardInterrupt:
         print("\nQuest complete? We hope so...")

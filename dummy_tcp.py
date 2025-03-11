@@ -8,13 +8,17 @@ socketClient.connect((IP,PORT))
  
 
 while True:
-    data = socketClient.recv(1024).decode()
-    print('\n' + f"Received from server: {data}" + '\n') #display to client 
-    
-    if "0x00" in data:
-        socketClient.send("test".encode())
+    try:
+        data = socketClient.recv(1024).decode()
+        print('\n' + f"Received from server: {data}" + '\n') #display to client 
 
-    if "SHUTDOWN" in data:
+        if "0x00" in data:
+            socketClient.send("recv_test".encode())
+
+        if "SHUTDOWN" in data:
+            break
+    except KeyboardInterrupt:
+        socketClient.send("CLIENT SHUTDOWN".encode())
         break
 
 socketClient.close()

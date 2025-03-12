@@ -1,5 +1,3 @@
-import can
-import time
 from abc import *
 
 class UDS_Service(ABC):

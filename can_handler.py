@@ -94,7 +94,7 @@ class CAN_Handler:
         print("Shutting down CAN interface...")
         if self.bus:
             if config.client_sock:
-                config.client_sock.sendall("SHUTDOWN".encode('utf-8')) 
+                config.client_sock.sendall("-1".encode('utf-8')) 
             self.bus.shutdown()
     
     def _initialize_ecus(self):

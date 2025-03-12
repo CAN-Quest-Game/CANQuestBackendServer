@@ -15,7 +15,7 @@ while True:
         if "0x00" in data:
             socketClient.send("recv_test".encode())
 
-        if "SHUTDOWN" in data:
+        if "-1" in data:
             break
     except KeyboardInterrupt:
         socketClient.send("CLIENT SHUTDOWN".encode())

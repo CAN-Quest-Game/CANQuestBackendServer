@@ -27,6 +27,7 @@ def client_handler(client_sock, can_handler, stop_can, verbose=config.verbose):
         config.stop_can.set()
 
 
+
 def main(verbose):
 
     try:
@@ -109,7 +110,7 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Error: {e}, please restart the server.")
             exit()
-       # print(config.verbose)
+
         main(config.verbose)
 
     except KeyboardInterrupt:

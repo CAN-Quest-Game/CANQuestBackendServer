@@ -29,21 +29,21 @@ def client_handler(client_sock, can_handler, stop_can, verbose=config.verbose):
 
 def main(verbose):
 
-    can_handler = CAN_Handler(verbose=config.verbose)
-    can_handler.setup()
-
     try:
-
-        can_thread = threading.Thread(target=can_message_handler, args=(can_handler, config.stop_can), daemon=True)
-        can_thread.start()
-
-        wiper_thread = threading.Thread(target=can_handler.broadcast_wiper_data, daemon=True)
-        wiper_thread.start()
+        can_handler = None
         print("Waiting for client connection...")
         while not config.stop_can.is_set():
-
             config.client_sock, addr = config.server_socket.accept()
-            print(f"Accepted connection from {addr}")    
+            print(f"Accepted connection from {addr}")   
+
+            can_handler = CAN_Handler(verbose=config.verbose)
+            can_handler.setup()
+
+            can_thread = threading.Thread(target=can_message_handler, args=(can_handler, config.stop_can), daemon=True)
+            can_thread.start()
+
+            wiper_thread = threading.Thread(target=can_handler.broadcast_wiper_data, daemon=True)
+            wiper_thread.start() 
 
             client_thread = threading.Thread(target=client_handler, args=(config.client_sock, can_handler, config.stop_can), daemon=True)
             client_thread.start()

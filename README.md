@@ -8,3 +8,5 @@ TO RUN:
 (optional, can do -v or --verbose for verbose)
 - Run dummy_tcp.py to test
 - Run algo_shams.py to easily get key value from seed if you're in a hurry
+
+issue: does not account for padding

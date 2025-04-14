@@ -4,7 +4,7 @@ echo "Checking if Python3 is installed..."
 if ! command -v python3 > /dev/null; then
     echo "Installing Python3..."
     sudo apt update
-    sudo apt install python3
+    sudo apt install python3 -y
 else
     echo "Python3 is already installed."
 fi
@@ -12,7 +12,7 @@ fi
 echo "Checking if pip is installed..."
 if ! command -v pip3 > /dev/null; then
     echo "Installing pip3..."
-    sudo apt install- python3-pip
+    sudo apt install python3-pip -y
 else
     echo "pip3 is already installed."
 fi
@@ -20,7 +20,7 @@ fi
 echo "Checking if can-utils is installed..."
 if ! command -v candump > /dev/null; then
     echo "Installing can-utils..."
-    sudo apt install can-utils
+    sudo apt install can-utils -y
 else
     echo "can-utils is already installed."
 fi
@@ -28,7 +28,7 @@ fi
 echo "Checking if Docker is installed..."
 if ! command -v docker > /dev/null; then
     echo "Installing Docker..."
-    sudo apt install docker.io
+    sudo apt install docker.io -y
 else
     echo "Docker is already installed."
 fi

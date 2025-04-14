@@ -25,6 +25,14 @@ else
     echo "can-utils is already installed."
 fi
 
+echo "Checking if Docker is installed..."
+if ! command -v docker > /dev/null; then
+    echo "Installing Docker..."
+    sudo apt install docker.io
+else
+    echo "Docker is already installed."
+fi
+
 echo "Checking if Caring-Caribou tool is installed..."
 if ! command caringcaribou -h > /dev/null && ! command cc.py -h > /dev/null; then
     echo "Installing Caring-Caribou tool..."

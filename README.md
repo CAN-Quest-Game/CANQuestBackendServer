@@ -1,7 +1,3 @@
-<!-- # CANQuestBackendServer
-It's a backend!
-new token: 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 -->
-
 <p align="center">
   <img src="utils/logo.png" alt="CANQuest Logo" width="200"/>
 </p>

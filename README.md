@@ -20,7 +20,7 @@ You have found my backdoor Unified Diagnostics Services (UDS) server that is imp
 
 Can YOU help me recover the flags and restore autonomy back to the people of Deartropolis? Time is ticking...
 
---- The White Hat
+— *The White Hat*
 </p>
 
 ## Game Setup Instructions
@@ -38,7 +38,7 @@ Can YOU help me recover the flags and restore autonomy back to the people of Dea
 Please see [CONTRIBUTING.md](CONTRIBUTING.md)!
 
 ## Troubleshooting
-1. Make sure all requirements in requirements.txt file are satisfied!
+1. Make sure all requirements in [requirements.txt](requirements.txt) file are satisfied!
 2. Verify your game and server are connected by the same IP address and are on the SAME WI-FI network 
     - Does not work with Ethernet
     - Make sure firewalls and VPNs are disabled

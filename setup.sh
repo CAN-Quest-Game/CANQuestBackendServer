@@ -47,7 +47,7 @@ fi
 echo "Checking for ~/.canrc file..."
 if [ ! -f $HOME/.canrc ]; then
     echo "Creating .canrc file..."
-    printf "[default]\ninterface = socketcan\nchannel = can0" > $HOME/.canrc
+    printf "[default]\ninterface = socketcan" > $HOME/.canrc
 else
     echo "~/.canrc file already exists."
 fi

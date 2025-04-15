@@ -7,7 +7,7 @@ Description: Custom Engine Control Module (ECM) class used for Quest 1. Inherits
 import re
 from .ecu import ECU
 from services.uds_services import *
-import config
+import server.config as config
 
 class ECM(ECU):
 

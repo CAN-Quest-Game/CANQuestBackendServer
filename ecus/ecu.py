@@ -5,7 +5,7 @@ Version: 1.0prod
 Description: Abstract ECU base class used for CANQuest Backend Server. This class serves as a base for specific ECU implementations (e.g., BCM, ECM, VCU). It defines the structure and methods for handling UDS services.
 '''
 from abc import ABC, abstractmethod
-import config
+import server.config as config
 
 class ECU(ABC):
     def __init__(self, name, req_arb_id, rsp_arb_id, verbose=config.verbose):

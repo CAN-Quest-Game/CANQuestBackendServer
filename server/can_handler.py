@@ -7,7 +7,7 @@ Description: CAN Handler module for the CANQuest Backend Server. This module han
 import sys
 import can
 import time
-import config
+import server.config as config
 from ecus.ecm import ECM
 from ecus.bcm import BCM    
 from ecus.vcu import VCU

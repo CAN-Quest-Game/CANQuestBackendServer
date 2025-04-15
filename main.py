@@ -8,8 +8,8 @@ import socket
 import threading
 import ipaddress
 import argparse
-import config
-from can_handler import * 
+import server.config as config
+from server.can_handler import * 
 
 def can_message_handler(can_handler, stop_can):
     '''

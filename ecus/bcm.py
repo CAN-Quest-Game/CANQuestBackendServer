@@ -8,7 +8,7 @@ import time
 import re
 from .ecu import ECU
 from services.uds_services import *
-import config
+import server.config as config
 
 class BCM(ECU):
 

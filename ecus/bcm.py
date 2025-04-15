@@ -1,3 +1,9 @@
+'''
+Filename: bcm.py
+Author: CANQuest Team
+Version: 1.0prod
+Description: Custom Body Control Module (BCM) class used for Quest 2. Inherits from the ECU class.
+'''
 import time
 import re
 from .ecu import ECU
@@ -5,6 +11,7 @@ from services.uds_services import *
 import config
 
 class BCM(ECU):
+
     def __init__(self, name, req_arb_id, rsp_arb_id, verbose=False):
         super().__init__(name, req_arb_id, rsp_arb_id, verbose=False)
 
@@ -15,7 +22,6 @@ class BCM(ECU):
             }
     
     def handle_request(self, payload, cansend):
-        #global wiper_status
         if (self.verbose): print("BCM")
         if (self.verbose): print(len(payload))
         payload_bytes = re.split(r'\s+', payload)
@@ -40,8 +46,6 @@ class BCM(ECU):
             if rsp == [0x51, 0x03]:
                 if (self.verbose): print("success yuh")
                 cansend.send_msg(self.rsp_arb_id, [0x7F, service_id, 0x78])
-                # cansend.send_msg(self.rsp_arb_id, rsp)
-                # cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x74, 0x72, 0x69, 0x63, 0x6B, 0x79, 0x5F, 0x6C, 0x65, 0x76, 0x65, 0x6C, 0x73, 0x7D], is_multiframe=True)
                 with config.status_lock:
                     config.wiper_status = 0x01
                 if (self.verbose): print("Wipers activated")
@@ -52,7 +56,6 @@ class BCM(ECU):
                     config.wiper_status = 0x00
                 if (self.verbose): print("Wipers off, reset complete")
                 cansend.send_msg(self.rsp_arb_id, rsp)
-                #66 6C 61 67 7B 63 61 6E 71 75 65 73 74 5F 68 65 61 64 71 75 61 72 74 65 72 73 7D
                 cansend.send_msg(self.rsp_arb_id, [0x66, 0x6C, 0x61, 0x67, 0x7B, 0x63, 0x61, 0x6E, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5F, 0x68, 0x65, 0x61, 0x64, 0x71, 0x75, 0x61, 0x72, 0x74, 0x65, 0x72, 0x73, 0x7D], is_multiframe=True)
                 if config.client_sock:
                     config.client_sock.send("0x0F".encode('utf-8'))

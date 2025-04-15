@@ -1,3 +1,9 @@
+'''
+Filename: vcu.py
+Author: CANQuest Team
+Version: 1.0prod
+Description: Custom Vehicle Cockpit Unit (VCU) class used for Quest 3. Inherits from the ECU class.
+'''
 import random
 import re
 from .ecu import ECU
@@ -35,7 +41,7 @@ class VCU(ECU):
             return rsp
 
         def handle_request(self, payload, cansend):
-            if (self.verbose): print(len(payload))    #apparently mem addr is not returnedd))
+            if (self.verbose): print(len(payload))
             payload_bytes = re.split(r'\s+', payload)
             dlc = payload_bytes[0]
             service_id = int(payload_bytes[1], 16)

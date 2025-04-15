@@ -1,9 +1,16 @@
+'''
+Filename: ecm.py
+Author: CANQuest Team
+Version: 1.0prod
+Description: Custom Engine Control Module (ECM) class used for Quest 1. Inherits from the ECU class.
+'''
 import re
 from .ecu import ECU
 from services.uds_services import *
 import config
 
 class ECM(ECU):
+
     def __init__(self, name, req_arb_id, rsp_arb_id, verbose=config.verbose):
         super().__init__(name, req_arb_id, rsp_arb_id, verbose=config.verbose)
 
@@ -34,7 +41,7 @@ class ECM(ECU):
             if (verbose): print("Active session is:", self.active_session)
         rsp = service.construct_msg(payload_bytes)
         if (verbose): print(rsp)
-        if self.active_session == 0x01: #maybe not the best way to do this
+        if self.active_session == 0x01:
             if rsp == [0x7E, 0x01]:
                 if(verbose): print("success yuh")
                 cansend.send_msg(self.rsp_arb_id, rsp)

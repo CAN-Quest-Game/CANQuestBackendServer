@@ -3,7 +3,7 @@ It's a backend!
 new token: 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 -->
 
 <p align="center">
-  <img src="logo.png" alt="CANQuest Logo" width="200"/>
+  <img src="utils/logo.png" alt="CANQuest Logo" width="200"/>
 </p>
 
 <h1 align="center"> CANQuest Backend Server 🚗 </h1>
@@ -38,7 +38,7 @@ Can YOU help me recover the flags and restore autonomy back to the people of Dea
 Please see [CONTRIBUTING.md](CONTRIBUTING.md)!
 
 ## Troubleshooting
-1. Make sure all requirements in [requirements.txt](requirements.txt) file are satisfied!
+1. Make sure all requirements in [requirements.txt](utils/requirements.txt) file are satisfied!
 2. Verify your game and server are connected by the same IP address and are on the SAME WI-FI network 
     - Does not work with Ethernet
     - Make sure firewalls and VPNs are disabled

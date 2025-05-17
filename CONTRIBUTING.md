@@ -14,7 +14,7 @@ It lets you easily simulate ECUs and test automotive cybersecurity workflows in 
 
 - Clone the repo by running `git clone https://github.com/CAN-Quest-Game/CANQuestBackendServer.git`
 - Run `python -r requirements.txt`
-- Run `sh setup.sh` to run dockerized container for server **(optional)**
+- Run `sh setup.sh` or `sh arm-setup.sh` to run dockerized container for server **(optional)**
 - Entrypoint file is main, run `python3 main.py`
     - For verbose mode, run `python3 main.py -v` or `python3 main.py --verbose` 
 - Need a client to test with? Run [dummy_tcp.py](utils/dummy_tcp.py) (it's really dumb)!

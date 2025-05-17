@@ -22,7 +22,7 @@ Can YOU help me recover the flags and restore autonomy back to the people of Dea
 ## Game Setup Instructions
 1. Make sure you run the server in a **Linux** environment: native or a VM!
     - If you are running a VM, make sure you have **Bridged Adapter** as your network setting!
-2. Download [setup.sh](setup.sh) OR easier access on the [CANQuest Download Page](https://thecanquest.com/) **NEW** if you have an ARM architecture (MAC M-Series Chips), please use the [arm-setup-script](arm-setup.sh).
+2. Download [setup.sh](setup.sh) OR easier access on the [CANQuest Download Page](https://thecanquest.com/) **NEW** if you have an ARM architecture (MAC M-Series Chips), please use [arm-setup.sh](arm-setup.sh).
 3. `cd` into where you downloaded the file and run `sh setup.sh` to run the dockerized server container.
 4. Connect to the server with your IP address. Connect to the game with the same IP address.
     - Find your IP address by running `ifconfig`
